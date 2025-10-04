@@ -1,0 +1,42 @@
+{
+  "steps": [
+    {
+      "action": "power_on"
+    },
+    {
+      "action": "open_app",
+      "app": "YouTube"
+    },
+    {
+      "action": "wait",
+      "seconds": 1
+    },
+    {
+      "action": "play",
+      "title": "Sony Demo Clip"
+    },
+    {
+      "action": "wait",
+      "seconds": 2
+    },
+    {
+      "action": "check_status",
+      "expect": "Playing"
+    },
+    {
+      "action": "open_app",
+      "app": "Netflix"
+    },
+    {
+      "action": "play",
+      "title": "Crash Example"
+    },
+    {
+      "action": "check_status",
+      "expect": "Playing"
+    },
+    {
+      "action": "power_off"
+    }
+  ]
+}

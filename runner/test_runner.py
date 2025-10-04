@@ -1,91 +1,102 @@
 import sys
+import os
 import json
-import requests
-import logging
 import time
-from datetime import datetime
+import requests
 
-LOG_FILE = 'runner/test_log.txt'
-TV_BASE = 'http://127.0.0.1:5000'
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+LOG_PATH = os.path.join(ROOT, 'runner', 'test_log.txt')
 
-# Setup logging
-logger = logging.getLogger('test_runner')
-logger.setLevel(logging.DEBUG)
-fh = logging.FileHandler(LOG_FILE)
-formatter = logging.Formatter('%(asctime)s | %(levelname)s | %(message)s')
-fh.setFormatter(formatter)
-logger.addHandler(fh)
+TV_BASE = "http://127.0.0.1:5000"  # Flask mock TV server base URL
 
-# Helper functions
 
-def log_pass(msg):
-    logger.info('[PASS] ' + msg)
+def log(msg):
+    """Append message to log file and print to console."""
+    timestamp = time.strftime("[%Y-%m-%d %H:%M:%S]")
+    line = f"{timestamp} {msg}"
+    print(line)
+    with open(LOG_PATH, "a", encoding="utf-8") as f:
+        f.write(line + "\n")
 
-def log_fail(msg):
-    logger.error('[FAIL] ' + msg)
 
-def do_action(action):
-    t0 = time.time()
-    try:
-        name = action.get('action')
-        if name == 'power_on':
-            r = requests.post(f'{TV_BASE}/power', json={'on': True}, timeout=5)
-            r.raise_for_status()
-            log_pass('Power ON')
-        elif name == 'power_off':
-            r = requests.post(f'{TV_BASE}/power', json={'on': False}, timeout=5)
-            r.raise_for_status()
-            log_pass('Power OFF')
-        elif name == 'open_app' or name == 'launch_app':
-            app = action.get('app')
-            r = requests.post(f'{TV_BASE}/app/launch', json={'app': app}, timeout=5)
-            if r.status_code == 200:
-                log_pass(f'Open App: {app}')
+def clear_log():
+    """Clear previous log file."""
+    if os.path.exists(LOG_PATH):
+        os.remove(LOG_PATH)
+
+
+def run_test(flow):
+    """Run test flow (supports both 'steps' and 'commands')."""
+    steps = flow.get("commands") or flow.get("steps") or []
+
+    if not steps:
+        log(" No commands found in the flow.")
+        return
+
+    log("=== TEST RUN START ===")
+
+    for step in steps:
+        try:
+            # Detect whether this is a command or action-style step
+            name = step.get("name") or step.get("action", "Unnamed Step")
+            log(f"Running step: {name}")
+
+            if "url" in step:  # Command-style JSON
+                url = step["url"]
+                payload = step.get("payload", {})
+                response = requests.post(url, json=payload, timeout=5)
+                log(f" Response [{response.status_code}]: {response.text}")
+                continue
+
+            # Action-style JSON (Flow Builder output)
+            action = step.get("action")
+            if action == "power_on":
+                response = requests.post(f"{TV_BASE}/power", json={"on": True}, timeout=5)
+            elif action == "power_off":
+                response = requests.post(f"{TV_BASE}/power", json={"on": False}, timeout=5)
+            elif action in ("launch_app", "open_app"):
+                app_name = step.get("app", "UnknownApp")
+                response = requests.post(f"{TV_BASE}/app/launch", json={"app": app_name}, timeout=5)
+            elif action == "play":
+                title = step.get("title", "Unknown Title")
+                response = requests.post(f"{TV_BASE}/app/play", json={"title": title}, timeout=5)
+            elif action == "check_status":
+                response = requests.get(f"{TV_BASE}/status", timeout=5)
+            elif action == "wait":
+                seconds = step.get("seconds", 1)
+                log(f"⏱ Waiting for {seconds}s...")
+                time.sleep(seconds)
+                continue
             else:
-                log_fail(f'Open App: {app} -> {r.status_code} {r.text}')
-        elif name == 'play':
-            title = action.get('title')
-            r = requests.post(f'{TV_BASE}/app/play', json={'title': title}, timeout=5)
-            if r.status_code == 200:
-                log_pass(f'Play: {title}')
-            else:
-                log_fail(f'Play: {title} -> {r.status_code} {r.text}')
-        elif name == 'wait':
-            secs = action.get('seconds', 1)
-            time.sleep(secs)
-            logger.info(f'[INFO] Waited {secs}s')
-        elif name == 'check_status':
-            expect = action.get('expect')
-            r = requests.get(f'{TV_BASE}/status', timeout=5)
-            r.raise_for_status()
-            js = r.json()
-            ok = False
-            if expect == 'App loaded':
-                ok = js.get('app') is not None
-            elif expect == 'Playing':
-                ok = js.get('playing') is True
-            if ok:
-                log_pass(f'Check: {expect}')
-            else:
-                log_fail(f'Check: {expect} -> state={js}')
-        else:
-            logger.warning('[INFO] Unknown action ' + str(name))
-    except Exception as e:
-        log_fail(f'Exception during action {action}: {e}')
-    finally:
-        duration = time.time() - t0
-        logger.info(f'[INFO] Action duration: {duration:.2f}s')
+                log(f"Unknown action: {action}")
+                continue
 
-if __name__ == '__main__':
-    if len(sys.argv) < 2:
-        print('Usage: python runner/test_runner.py path/to/flow.json')
+            log(f"Response [{response.status_code}]: {response.text}")
+
+        except Exception as e:
+            log(f" Error during step '{step}': {e}")
+
+    log("=== TEST RUN END ===")
+    log(" Test flow completed.\n")
+
+
+if __name__ == "__main__":
+    clear_log()
+
+    if len(sys.argv) > 1:
+        flow_path = sys.argv[1]
+    else:
+        print("No flow file provided.")
+        flow_path = input("Enter flow file path (e.g. examples/sample_flow.json): ").strip()
+
+    if not os.path.exists(flow_path):
+        print(f" File not found: {flow_path}")
         sys.exit(1)
-    flow_file = sys.argv[1]
-    with open(flow_file, 'r') as f:
-        flow = json.load(f)
 
-    logger.info('=== TEST RUN START ===')
-    for step in flow.get('steps', []):
-        do_action(step)
-    logger.info('=== TEST RUN END ===')
-    print('Test run complete. Log saved to', LOG_FILE)
+    try:
+        with open(flow_path, "r", encoding="utf-8") as f:
+            flow = json.load(f)
+        log(f"Starting test run for flow: {os.path.basename(flow_path)}")
+        run_test(flow)
+    except Exception as e:
+        log(f" Fatal error: {e}")

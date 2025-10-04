@@ -1,0 +1,16 @@
+{
+    "steps": [
+        {
+            "action": "launch_app",
+            "app": "Youtube"
+        },
+        {
+            "action": "wait",
+            "seconds": 300
+        },
+        {
+            "action": "check_status",
+            "expect": "Playing"
+        }
+    ]
+}

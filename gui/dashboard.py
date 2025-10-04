@@ -36,6 +36,9 @@ class App(tk.Tk):
         btn_stop_mock = ttk.Button(left, text='Stop Mock TV Server', command=self.stop_mock)
         btn_stop_mock.pack(fill='x', pady=4)
 
+        btn_build_flow = ttk.Button(left, text='Build Test Flow (JSON)', command=self.build_flow)
+        btn_build_flow.pack(fill='x', pady=4)
+
         btn_run_tests = ttk.Button(left, text='Run Test Flow', command=self.run_tests)
         btn_run_tests.pack(fill='x', pady=4)
 
@@ -108,15 +111,33 @@ class App(tk.Tk):
             self.load_log()
         threading.Thread(target=target, daemon=True).start()
 
-    def package_project(self):
-        def target():
-            self.append('Packaging project into zip...\n')
-            try:
-                subprocess.run(['python', os.path.join(ROOT, 'make_package.py')], cwd=ROOT, check=True)
-                self.append('Packaged to tv-test-analyzer.zip in project root.\n')
-            except subprocess.CalledProcessError as e:
-                self.append(f'Packaging failed: {e}\n')
-        threading.Thread(target=target, daemon=True).start()
+    def run_tests(self):
+     from tkinter import filedialog
+
+     flow_file = filedialog.askopenfilename(
+          title="Select Test Flow JSON",
+          filetypes=[("JSON files", "*.json")],
+          initialdir=os.path.join(ROOT, 'examples')
+    )
+
+     if not flow_file:
+        messagebox.showinfo("Run Test Flow", "No flow file selected.")
+        return
+
+     def target():
+        self.append(f"Running test flow: {os.path.basename(flow_file)}\n")
+        try:
+            # Run the test runner with the selected JSON file
+            subprocess.run(['python', os.path.join(ROOT, 'runner', 'test_runner.py'), flow_file], cwd=ROOT, check=True)
+            self.append("Test runner finished successfully.\n")
+        except subprocess.CalledProcessError as e:
+            self.append(f"Error running tests: {e}\n")
+        except Exception as e:
+            self.append(f"Unexpected error: {e}\n")
+        self.load_log()
+
+     threading.Thread(target=target, daemon=True).start()
+
 
     def load_log(self):
         path = os.path.join(ROOT, 'runner', 'test_log.txt')
@@ -126,6 +147,16 @@ class App(tk.Tk):
                 self.log_text.insert(tk.END, f.read())
         else:
             self.log_text.insert(tk.END, 'No test_log.txt found. Run tests first.')
+
+    def build_flow(self):
+      self.append("Opening Flow Builder...\n")
+      try:
+          subprocess.run(['python', os.path.join(ROOT, 'tools', 'flow_builder.py')])
+          self.append("Flow Builder closed.\n")
+      except Exception as e:
+          messagebox.showerror("Flow Builder", f"Error: {e}")
+
+
 
     def open_chart(self):
         path = os.path.join(ROOT, 'reports', 'pass_fail.png')

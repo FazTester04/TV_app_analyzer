@@ -66,7 +66,7 @@ def main():
         print("[WARNING] No log entries parsed or file empty.")
         sys.exit(0)
 
-    # Compute summary stats
+    
     total = len(df[df['status'].isin(['PASS','FAIL'])])
     passes = len(df[df['status'] == 'PASS'])
     fails = len(df[df['status'] == 'FAIL'])
@@ -78,7 +78,7 @@ def main():
         print("\nTop failures:")
         print(common)
 
-    # Output file
+ 
     out_dir = os.path.join(os.path.dirname(__file__), '..', 'runner')
     os.makedirs(out_dir, exist_ok=True)
     out_csv = os.path.join(out_dir, 'log_summary.csv')
